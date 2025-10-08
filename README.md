@@ -95,6 +95,8 @@ python3 credmaster.py --config config.json
 
 When using `--proxy`, AWS credentials are not required. The tool will route all requests through the specified proxy instead of creating AWS API gateways.
 
+**Proxy Retry Logic**: CredMaster includes automatic retry logic for proxy 503/502 errors. Use `--proxy-retries N` to set the number of retries (default: 3). This helps handle temporary proxy service issues.
+
 This tool requires AWS API access keys for FireProx mode, a walkthrough on how to acquire these keys can be found here: https://bond-o.medium.com/aws-pass-through-proxy-84f1f7fa4b4b
 
 All other usage details can be found [on the wiki](https://github.com/knavesec/CredMaster/wiki/Usage)

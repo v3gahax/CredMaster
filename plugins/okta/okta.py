@@ -31,9 +31,10 @@ def okta_authenticate(url, username, password, useragent, pluginargs):
 
     try:
         proxy_url = pluginargs.get('proxy_url')
+        proxy_retries = pluginargs.get('proxy_retries', 3)
         
         if proxy_url:
-            resp = utils.make_proxy_request('post', f"{url}/api/v1/authn/", proxy_url=proxy_url, data=raw_body, headers=headers)
+            resp = utils.make_proxy_request('post', f"{url}/api/v1/authn/", proxy_url=proxy_url, max_retries=proxy_retries, data=raw_body, headers=headers)
         else:
             resp = requests.post(f"{url}/api/v1/authn/",data=raw_body,headers=headers)
 

@@ -31,12 +31,13 @@ def owa_authenticate(url, username, password, useragent, pluginargs):
     try:
         # Check if proxy is configured
         proxy_url = pluginargs.get('proxy_url')
+        proxy_retries = pluginargs.get('proxy_retries', 3)
         
         if proxy_url:
             # Use proxy-aware request
             resp = utils.make_proxy_request('get', f"{url}/autodiscover/autodiscover.xml", 
-                                          proxy_url=proxy_url, headers=headers, 
-                                          auth=HttpNtlmAuth(username, password))
+                                          proxy_url=proxy_url, max_retries=proxy_retries, 
+                                          headers=headers, auth=HttpNtlmAuth(username, password))
         else:
             # Use direct request
             resp = requests.get(f"{url}/autodiscover/autodiscover.xml", headers=headers, auth=HttpNtlmAuth(username, password), verify=False)

@@ -36,13 +36,14 @@ def httppost_authenticate(url, username, password, useragent, pluginargs):
 
         resp = None
         proxy_url = pluginargs.get('proxy_url')
+        proxy_retries = pluginargs.get('proxy_retries', 3)
         full_url = f"{url}/{pluginargs['uri']}"
 
         # Replace {USER} and {PASS} placeholders in the body
         body = pluginargs['body'].replace("{USER}", username).replace("{PASS}", password)
 
         if proxy_url:
-            resp = utils.make_proxy_request('post', full_url, proxy_url=proxy_url, data=body, headers=headers, timeout=30)
+            resp = utils.make_proxy_request('post', full_url, proxy_url=proxy_url, max_retries=proxy_retries, data=body, headers=headers, timeout=30)
         else:
             resp = requests.post(url=full_url, data=body, headers=headers, verify=False, timeout=30)
 

@@ -130,30 +130,49 @@ class ProxyManager:
         """
         return self.session
     
-    def test_proxy_connection(self, test_url="http://httpbin.org/ip", timeout=10):
+    def test_proxy_connection(self, test_url="http://httpbin.org/ip", timeout=10, max_retries=3):
         """
-        Test proxy connection
+        Test proxy connection with retry logic for 503/502 errors
         
         Args:
             test_url (str): URL to test connection against
             timeout (int): Request timeout in seconds
+            max_retries (int): Maximum number of retries for 503/502 errors
             
         Returns:
             tuple: (success: bool, response: str)
         """
-        try:
-            if not self.session:
-                return False, "No proxy session configured"
-            
-            response = self.session.get(test_url, timeout=timeout, verify=False)
-            
-            if response.status_code == 200:
-                return True, f"Proxy connection successful. Response: {response.text[:200]}"
-            else:
-                return False, f"Proxy connection failed with status code: {response.status_code}"
+        if not self.session:
+            return False, "No proxy session configured"
+        
+        retry_count = 0
+        last_error = None
+        
+        while retry_count <= max_retries:
+            try:
+                response = self.session.get(test_url, timeout=timeout)
                 
-        except Exception as e:
-            return False, f"Proxy connection failed: {str(e)}"
+                if response.status_code == 200:
+                    return True, f"Proxy connection successful. Response: {response.text[:200]}"
+                elif response.status_code in [502, 503]:
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        last_error = f"Proxy returned {response.status_code}, retrying ({retry_count}/{max_retries})..."
+                        continue
+                    else:
+                        return False, f"Proxy connection failed after {max_retries} retries. Last status: {response.status_code}"
+                else:
+                    return False, f"Proxy connection failed with status code: {response.status_code}"
+                    
+            except Exception as e:
+                retry_count += 1
+                if retry_count <= max_retries:
+                    last_error = f"Connection error, retrying ({retry_count}/{max_retries}): {str(e)}"
+                    continue
+                else:
+                    return False, f"Proxy connection failed after {max_retries} retries: {str(e)}"
+        
+        return False, f"Proxy connection failed: {last_error}"
     
     def cleanup(self):
         """

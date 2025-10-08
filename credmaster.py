@@ -132,6 +132,7 @@ class CredMaster(object):
 		
 		# Proxy configuration
 		self.proxy_url = args.proxy or config_dict.get("proxy")
+		self.proxy_retries = args.proxy_retries or config_dict.get("proxy_retries", 3)
 
 
 	def do_input_error_handling(self):
@@ -249,7 +250,7 @@ class CredMaster(object):
 		##
 		pluginargs['thread_count'] = self.thread_count
 
-		self.start_time = datetime.datetime.utcnow()
+		self.start_time = datetime.datetime.now(datetime.timezone.utc)
 		self.log_entry(f"Execution started at: {self.start_time}")
 
 		# Check with plugin to make sure it has the data that it needs
@@ -300,7 +301,7 @@ class CredMaster(object):
 				self.log_entry("Proxy mode enabled - skipping AWS FireProx setup")
 				
 				# Test proxy connection
-				success, message = proxy_manager.test_proxy_connection()
+				success, message = proxy_manager.test_proxy_connection(max_retries=self.proxy_retries)
 				if not success:
 					self.log_entry(f"Proxy connection test failed: {message}")
 					sys.exit()
@@ -359,7 +360,7 @@ class CredMaster(object):
 
 					self.weekdaywarrior = int(self.weekdaywarrior)
 					sleep_time = self.ww_calc_next_spray_delay(self.weekdaywarrior)
-					next_time = datetime.datetime.utcnow() + datetime.timedelta(hours=self.weekdaywarrior) + datetime.timedelta(minutes=sleep_time)
+					next_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=self.weekdaywarrior) + datetime.timedelta(minutes=sleep_time)
 					self.log_entry(f"Weekday Warrior: sleeping {sleep_time} minutes until {next_time.strftime('%H:%M')} on {spray_days[next_time.weekday()]} in UTC {self.weekdaywarrior}")
 					time.sleep(sleep_time*60)
 
@@ -379,19 +380,19 @@ class CredMaster(object):
 
 				if self.delay is None or len(passwords) == 1 or password == passwords[len(passwords)-1]:
 					if self.userpassfile != None:
-						self.log_entry(f"Completed spray with user-pass file {self.userpassfile} at {datetime.datetime.utcnow()}")
+						self.log_entry(f"Completed spray with user-pass file {self.userpassfile} at {datetime.datetime.now(datetime.timezone.utc)}")
 					elif self.userenum:
-						self.log_entry(f"Completed userenum at {datetime.datetime.utcnow()}")
+						self.log_entry(f"Completed userenum at {datetime.datetime.now(datetime.timezone.utc)}")
 					else:
-						self.log_entry(f"Completed spray with password {password} at {datetime.datetime.utcnow()}")
+						self.log_entry(f"Completed spray with password {password} at {datetime.datetime.now(datetime.timezone.utc)}")
 
 					notify.notify_update(f"Info: Spray complete.", self.notify_obj)
 					continue
 				elif count != self.passwordsperdelay:
-					self.log_entry(f"Completed spray with password {password} at {datetime.datetime.utcnow()}, moving on to next password...")
+					self.log_entry(f"Completed spray with password {password} at {datetime.datetime.now(datetime.timezone.utc)}, moving on to next password...")
 					continue
 				else:
-					self.log_entry(f"Completed spray with password {password} at {datetime.datetime.utcnow()}, sleeping for {self.delay} minutes before next password spray")
+					self.log_entry(f"Completed spray with password {password} at {datetime.datetime.now(datetime.timezone.utc)}, sleeping for {self.delay} minutes before next password spray")
 					self.log_entry(f"Valid credentials discovered: {len(self.results)}")
 					for success in self.results:
 						self.log_entry(f"Valid: {success['username']}:{success['password']}")
@@ -421,7 +422,7 @@ class CredMaster(object):
 				self.log_entry("Second KeyboardInterrupt detected, unable to clean up :( try the --clean option")
 
 		# Capture duration
-		self.end_time = datetime.datetime.utcnow()
+		self.end_time = datetime.datetime.now(datetime.timezone.utc)
 		self.time_lapse = (self.end_time-self.start_time).total_seconds()
 
 		# Print stats
@@ -587,6 +588,7 @@ class CredMaster(object):
 				# Add proxy URL to pluginargs if proxy is configured
 				if self.proxy_url is not None:
 					pluginargs["proxy_url"] = self.proxy_url
+					pluginargs["proxy_retries"] = self.proxy_retries
 				
 				response = plugin_authentiate(api_dict["proxy_url"], cred["username"], cred["password"], cred["useragent"], pluginargs)
 
@@ -682,7 +684,7 @@ class CredMaster(object):
 
 		spray_times = [8,12,14] # launch sprays at 7AM, 11AM and 3PM
 
-		now = datetime.datetime.utcnow() + datetime.timedelta(hours=offset)
+		now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=offset)
 		hour_cur = int(now.strftime("%H"))
 		minutes_cur = int(now.strftime("%M"))
 		day_cur = int(now.weekday())
@@ -728,7 +730,7 @@ class CredMaster(object):
 
 		self.lock.acquire()
 
-		ts = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+		ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
 		print(f"[{ts}] {entry}")
 
 		if self.outfile is not None:
@@ -793,6 +795,7 @@ if __name__ == '__main__':
 	adv_args.add_argument('--color', default=False, action="store_true", required=False, help="Output spray results in Green/Yellow/Red colors")
 	adv_args.add_argument('--trim', '--remove', action="store_true", help="Remove users with found credentials from future sprays")
 	adv_args.add_argument('--proxy', default=None, required=False, help='Proxy URL (socks4://host:port, socks4a://host:port, socks5://host:port, http://host:port). Supports authentication: protocol://user:pass@host:port')
+	adv_args.add_argument('--proxy-retries', type=int, default=3, required=False, help='Number of retries for proxy 503/502 errors (default: 3)')
 
 	notify_args = parser.add_argument_group(title='Notification Inputs')
 	notify_args.add_argument('--slack_webhook', type=str, default=None, help='Webhook link for Slack notifications')

@@ -39,7 +39,7 @@ def add_custom_headers(pluginargs, headers):
     return headers
 
 
-def get_owa_domain(url, uri, useragent):
+def get_owa_domain(url, uri, useragent, proxy_url=None):
     # Stolen from https://github.com/byt3bl33d3r/SprayingToolkit who stole it from https://github.com/dafthack/MailSniper
     auth_header = {
         "Authorization": "NTLM TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAGAbEdAAAADw==",
@@ -49,10 +49,18 @@ def get_owa_domain(url, uri, useragent):
         "X-My-X-Amzn-Trace-Id" : generate_trace_id(),
     }
 
-    r = requests.post("{url}{uri}".format(url=url,uri=uri), headers=auth_header, verify=False)
+    r = make_proxy_request('post', f"{url}{uri}", proxy_url=proxy_url, headers=auth_header)
     if r.status_code == 401:
-        ntlm_info = ntlmdecode(r.headers["x-amzn-Remapped-WWW-Authenticate"])
-        return ntlm_info["NetBIOS_Domain_Name"]
+        # Check for AWS-specific header first (FireProx mode)
+        if "x-amzn-Remapped-WWW-Authenticate" in r.headers:
+            ntlm_info = ntlmdecode(r.headers["x-amzn-Remapped-WWW-Authenticate"])
+            return ntlm_info["NetBIOS_Domain_Name"]
+        # Check for standard WWW-Authenticate header (proxy mode)
+        elif "WWW-Authenticate" in r.headers:
+            ntlm_info = ntlmdecode(r.headers["WWW-Authenticate"])
+            return ntlm_info["NetBIOS_Domain_Name"]
+        else:
+            return "NOTFOUND"
     else:
         return "NOTFOUND"
 
@@ -86,14 +94,15 @@ def get_proxy_session(proxy_url=None):
         return requests.Session()
 
 
-def make_proxy_request(method, url, proxy_url=None, **kwargs):
+def make_proxy_request(method, url, proxy_url=None, max_retries=3, **kwargs):
     """
-    Make a request through a proxy if configured
+    Make a request through a proxy if configured with retry logic for 503/502 errors
     
     Args:
         method (str): HTTP method (get, post, etc.)
         url (str): Target URL
         proxy_url (str): Optional proxy URL
+        max_retries (int): Maximum number of retries for 503/502 errors
         **kwargs: Additional arguments for requests
         
     Returns:
@@ -104,6 +113,26 @@ def make_proxy_request(method, url, proxy_url=None, **kwargs):
     # Remove verify=False from kwargs if present and set it explicitly
     verify = kwargs.pop('verify', False)
     
+    retry_count = 0
+    while retry_count <= max_retries:
+        try:
+            response = getattr(session, method.lower())(url, verify=verify, **kwargs)
+            
+            # If we get 503/502, retry if we haven't exceeded max_retries
+            if response.status_code in [502, 503] and retry_count < max_retries:
+                retry_count += 1
+                continue
+            else:
+                return response
+                
+        except Exception as e:
+            if retry_count < max_retries:
+                retry_count += 1
+                continue
+            else:
+                raise e
+    
+    # This should never be reached, but just in case
     return getattr(session, method.lower())(url, verify=verify, **kwargs)
 
 
