@@ -1,6 +1,7 @@
 import random, requests, json
 from utils.ntlmdecode import ntlmdecode
 from datetime import datetime
+import socket
 
 # We can set anything up here for easy parsing and access later, for the moment this only houses the slack webhook, can probably add discord and other platforms at a later date as parsing isn't an issue.
 
@@ -65,3 +66,62 @@ def prGreen(skk):
 
 def prYellow(skk):
     return "\033[93m{}\033[00m" .format(skk)
+
+
+def get_proxy_session(proxy_url=None):
+    """
+    Get a requests session configured with proxy settings
+    
+    Args:
+        proxy_url (str): Proxy URL in format 'protocol://[user:pass@]host:port'
+        
+    Returns:
+        requests.Session: Configured session
+    """
+    if proxy_url:
+        from utils.proxy import ProxyManager
+        proxy_manager = ProxyManager(proxy_url)
+        return proxy_manager.get_session()
+    else:
+        return requests.Session()
+
+
+def make_proxy_request(method, url, proxy_url=None, **kwargs):
+    """
+    Make a request through a proxy if configured
+    
+    Args:
+        method (str): HTTP method (get, post, etc.)
+        url (str): Target URL
+        proxy_url (str): Optional proxy URL
+        **kwargs: Additional arguments for requests
+        
+    Returns:
+        requests.Response: Response object
+    """
+    session = get_proxy_session(proxy_url)
+    
+    # Remove verify=False from kwargs if present and set it explicitly
+    verify = kwargs.pop('verify', False)
+    
+    return getattr(session, method.lower())(url, verify=verify, **kwargs)
+
+
+def get_proxy_domain(url, uri, useragent, proxy_url=None):
+    """
+    Proxy-aware version of get_owa_domain function
+    """
+    auth_header = {
+        "Authorization": "NTLM TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAGAbEdAAAADw==",
+        'User-Agent': useragent,
+        "X-My-X-Forwarded-For" : generate_ip(),
+        "x-amzn-apigateway-api-id" : generate_id(),
+        "X-My-X-Amzn-Trace-Id" : generate_trace_id(),
+    }
+
+    r = make_proxy_request('post', f"{url}{uri}", proxy_url=proxy_url, headers=auth_header)
+    if r.status_code == 401:
+        ntlm_info = ntlmdecode(r.headers["x-amzn-Remapped-WWW-Authenticate"])
+        return ntlm_info["NetBIOS_Domain_Name"]
+    else:
+        return "NOTFOUND"

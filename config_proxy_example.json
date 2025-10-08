@@ -1,0 +1,10 @@
+{
+    "plugin": "owa",
+    "userfile": "users.txt",
+    "passwordfile": "passwords.txt",
+    "threads": 5,
+    "proxy": "socks5://127.0.0.1:1080",
+    "color": true,
+    "delay": 1,
+    "passwordsperdelay": 1
+}

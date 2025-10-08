@@ -29,20 +29,29 @@ def httpbrute_authenticate(url, username, password, useragent, pluginargs):
     try:
 
         resp = None
-
+        proxy_url = pluginargs.get('proxy_url')
         full_url = f"{url}/{pluginargs['uri']}"
 
         if pluginargs['auth'] == 'basic':
             auth = requests.auth.HTTPBasicAuth(username, password)
-            resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
+            if proxy_url:
+                resp = utils.make_proxy_request('get', full_url, proxy_url=proxy_url, auth=auth, timeout=30)
+            else:
+                resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
 
         elif pluginargs['auth'] == 'digest':
             auth = requests.auth.HTTPDigestAuth(username, password)
-            resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
+            if proxy_url:
+                resp = utils.make_proxy_request('get', full_url, proxy_url=proxy_url, auth=auth, timeout=30)
+            else:
+                resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
 
         else: # NTLM
             auth = requests_ntlm.HttpNtlmAuth(username, password)
-            resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
+            if proxy_url:
+                resp = utils.make_proxy_request('get', full_url, proxy_url=proxy_url, auth=auth, timeout=30)
+            else:
+                resp = requests.get(url=full_url, auth=auth, verify=False, timeout=30)
 
 
         if resp.status_code == 200:

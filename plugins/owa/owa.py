@@ -29,8 +29,17 @@ def owa_authenticate(url, username, password, useragent, pluginargs):
     headers = utils.add_custom_headers(pluginargs, headers)
 
     try:
-
-        resp = requests.get(f"{url}/autodiscover/autodiscover.xml", headers=headers, auth=HttpNtlmAuth(username, password), verify=False)
+        # Check if proxy is configured
+        proxy_url = pluginargs.get('proxy_url')
+        
+        if proxy_url:
+            # Use proxy-aware request
+            resp = utils.make_proxy_request('get', f"{url}/autodiscover/autodiscover.xml", 
+                                          proxy_url=proxy_url, headers=headers, 
+                                          auth=HttpNtlmAuth(username, password))
+        else:
+            # Use direct request
+            resp = requests.get(f"{url}/autodiscover/autodiscover.xml", headers=headers, auth=HttpNtlmAuth(username, password), verify=False)
 
         if resp.status_code == 200:
             data_response['output'] = f"[+] SUCCESS: Found credentials: {username}:{password}"

@@ -4,6 +4,7 @@ import threading, queue, argparse, datetime, json, importlib, random, os, time, 
 from utils.fire import FireProx
 import utils.utils as utils
 import utils.notify as notify
+from utils.proxy import ProxyManager
 
 
 class CredMaster(object):
@@ -37,6 +38,7 @@ class CredMaster(object):
 		self.clean = args.clean
 		self.api_destroy = args.api_destroy
 		self.api_list = args.api_list
+		self.proxy_url = args.proxy
 
 		self.pargs = pargs
 		self.parse_all_args(args)
@@ -127,6 +129,9 @@ class CredMaster(object):
 		self.secret_access_key = args.secret_access_key or config_dict.get("secret_access_key")
 		self.session_token = args.session_token or config_dict.get("session_token")
 		self.profile_name = args.profile_name or config_dict.get("profile_name")
+		
+		# Proxy configuration
+		self.proxy_url = args.proxy or config_dict.get("proxy")
 
 
 	def do_input_error_handling(self):
@@ -155,22 +160,36 @@ class CredMaster(object):
 			self.log_entry(f"Useragent file {self.useragentfile} cannot be found")
 			sys.exit()
 
-		# AWS Key Handling
-		if self.session_token is not None and (self.secret_access_key is None or self.access_key is None):
-			self.log_entry("Session token requires access_key and secret_access_key")
-			sys.exit()
-		if self.profile_name is not None and (self.access_key is not None or self.secret_access_key is not None):
-			self.log_entry("Cannot use a passed profile and keys")
-			sys.exit()
-		if self.access_key is not None and self.secret_access_key is None:
-			self.log_entry("access_key requires secret_access_key")
-			sys.exit()
-		if self.access_key is None and self.secret_access_key is not None:
-			self.log_entry("secret_access_key requires access_key")
-			sys.exit()
-		if self.access_key is None and self.secret_access_key is None and self.session_token is None and self.profile_name is None:
-			self.log_entry("No FireProx access arguments settings configured, add access keys/session token or fill out config file")
-			sys.exit()
+		# Proxy validation
+		if self.proxy_url is not None:
+			try:
+				from utils.proxy import validate_proxy_url
+				is_valid, error_msg = validate_proxy_url(self.proxy_url)
+				if not is_valid:
+					self.log_entry(f"Invalid proxy URL: {error_msg}")
+					sys.exit()
+				self.log_entry(f"Proxy configured: {self.proxy_url}")
+			except Exception as e:
+				self.log_entry(f"Error validating proxy URL: {e}")
+				sys.exit()
+
+		# AWS Key Handling - Skip if using proxy
+		if self.proxy_url is None:
+			if self.session_token is not None and (self.secret_access_key is None or self.access_key is None):
+				self.log_entry("Session token requires access_key and secret_access_key")
+				sys.exit()
+			if self.profile_name is not None and (self.access_key is not None or self.secret_access_key is not None):
+				self.log_entry("Cannot use a passed profile and keys")
+				sys.exit()
+			if self.access_key is not None and self.secret_access_key is None:
+				self.log_entry("access_key requires secret_access_key")
+				sys.exit()
+			if self.access_key is None and self.secret_access_key is not None:
+				self.log_entry("secret_access_key requires access_key")
+				sys.exit()
+			if self.access_key is None and self.secret_access_key is None and self.session_token is None and self.profile_name is None:
+				self.log_entry("No FireProx access arguments settings configured, add access keys/session token or fill out config file")
+				sys.exit()
 
 		# Region handling
 		if self.region is not None and self.region not in self.regions:
@@ -274,8 +293,25 @@ class CredMaster(object):
 		threads = []
 
 		try:
-			# Create lambdas based on thread count
-			self.load_apis(url, region = self.region)
+			# Initialize proxy manager if proxy is configured
+			proxy_manager = None
+			if self.proxy_url is not None:
+				proxy_manager = ProxyManager(self.proxy_url)
+				self.log_entry("Proxy mode enabled - skipping AWS FireProx setup")
+				
+				# Test proxy connection
+				success, message = proxy_manager.test_proxy_connection()
+				if not success:
+					self.log_entry(f"Proxy connection test failed: {message}")
+					sys.exit()
+				else:
+					self.log_entry(f"Proxy connection test successful: {message}")
+				
+				# Create mock API structure for compatibility
+				self.apis = [{"proxy_url": url, "region": "proxy", "api_gateway_id": "proxy"}]
+			else:
+				# Create lambdas based on thread count
+				self.load_apis(url, region = self.region)
 
 			# do test connection / fingerprint
 			useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:59.0) Gecko/20100101 Firefox/59.0"
@@ -283,7 +319,8 @@ class CredMaster(object):
 			self.log_entry(testconnect_output)
 
 			if not connect_success:
-				self.destroy_apis()
+				if self.proxy_url is None:
+					self.destroy_apis()
 				sys.exit()
 
 			# Print stats
@@ -361,19 +398,27 @@ class CredMaster(object):
 					count = 0
 					time.sleep(self.delay * 60)
 
-			# Remove AWS resources
-			self.destroy_apis()
+			# Remove AWS resources or cleanup proxy
+			if self.proxy_url is None:
+				self.destroy_apis()
+			else:
+				if proxy_manager:
+					proxy_manager.cleanup()
 
 		except KeyboardInterrupt:
-			self.log_entry("KeyboardInterrupt detected, cleaning up APIs")
+			self.log_entry("KeyboardInterrupt detected, cleaning up")
 			try:
 				self.log_entry("Finishing active requests")
 				self.cancelled = True
 				for t in threads:
 					t.join()
-				self.destroy_apis()
+				if self.proxy_url is None:
+					self.destroy_apis()
+				else:
+					if proxy_manager:
+						proxy_manager.cleanup()
 			except KeyboardInterrupt:
-				self.log_entry("Second KeyboardInterrupt detected, unable to clean up APIs :( try the --clean option")
+				self.log_entry("Second KeyboardInterrupt detected, unable to clean up :( try the --clean option")
 
 		# Capture duration
 		self.end_time = datetime.datetime.utcnow()
@@ -429,8 +474,12 @@ class CredMaster(object):
 
 	def display_stats(self, start=True):
 		if start:
-			self.log_entry(f"Total Regions Available: {len(self.regions)}")
-			self.log_entry(f"Total API Gateways: {len(self.apis)}")
+			if self.proxy_url is not None:
+				self.log_entry(f"Proxy Mode: {self.proxy_url}")
+				self.log_entry(f"Total Threads: {self.thread_count}")
+			else:
+				self.log_entry(f"Total Regions Available: {len(self.regions)}")
+				self.log_entry(f"Total API Gateways: {len(self.apis)}")
 
 		if self.end_time and not start:
 			self.log_entry(f"End Time: {self.end_time}")
@@ -535,6 +584,10 @@ class CredMaster(object):
 						self.jitter_min = 0
 					time.sleep(random.randint(self.jitter_min,self.jitter))
 
+				# Add proxy URL to pluginargs if proxy is configured
+				if self.proxy_url is not None:
+					pluginargs["proxy_url"] = self.proxy_url
+				
 				response = plugin_authentiate(api_dict["proxy_url"], cred["username"], cred["password"], cred["useragent"], pluginargs)
 
 				# if "debug" in response.keys():
@@ -739,6 +792,7 @@ if __name__ == '__main__':
 	adv_args.add_argument('--weekday_warrior', default=None, required=False, help="If you don't know what this is don't use it, input is timezone UTC offset")
 	adv_args.add_argument('--color', default=False, action="store_true", required=False, help="Output spray results in Green/Yellow/Red colors")
 	adv_args.add_argument('--trim', '--remove', action="store_true", help="Remove users with found credentials from future sprays")
+	adv_args.add_argument('--proxy', default=None, required=False, help='Proxy URL (socks4://host:port, socks4a://host:port, socks5://host:port, http://host:port). Supports authentication: protocol://user:pass@host:port')
 
 	notify_args = parser.add_argument_group(title='Notification Inputs')
 	notify_args.add_argument('--slack_webhook', type=str, default=None, help='Webhook link for Slack notifications')

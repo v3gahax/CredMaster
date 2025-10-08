@@ -1,6 +1,6 @@
 # CredMaster #
 
-Launch a password spray / brute force attach via Amazon AWS passthrough proxies, shifting the requesting IP address for every authentication attempt. This dynamically creates FireProx APIs for more evasive password sprays.  
+Launch a password spray / brute force attack via Amazon AWS passthrough proxies or traditional proxies (SOCKS4/SOCKS5/HTTP), shifting the requesting IP address for every authentication attempt. This dynamically creates FireProx APIs for more evasive password sprays, or uses traditional proxies for simpler setups without AWS infrastructure.
 
 Shoutout to [@ustayready](https://twitter.com/ustayready) for his [CredKing](https://github.com/ustayready/CredKing) and [FireProx](https://github.com/ustayready/fireprox) tools, which form the base of this suite.
 
@@ -20,7 +20,8 @@ For detection tips, see the blogpost and detection section.
 ## Benefits & Features ##
 
 * Rotates the requesting IP address for every request
-* Automatically generates APIs for proxy passthru
+* Automatically generates APIs for proxy passthru (AWS FireProx mode)
+* **NEW**: Support for traditional proxies (SOCKS4/SOCKS4A/SOCKS5/HTTP) without AWS infrastructure
 * Spoofs API tracking numbers, forwarded-for IPs, and other proxy tracking headers = fully [anonymous](https://github.com/knavesec/CredMaster/wiki/Anonymity)
 * Easily configuation via config file
 * Multi-threaded processing
@@ -69,9 +70,14 @@ The following plugins are currently supported:
   * `--plugin httppost`
 
 
-Example Use:
+Example Use (AWS FireProx mode):
 ```
 python3 credmaster.py --plugin {pluginname} --access_key {key} --secret_access_key {key} -u userfile -p passwordfile -a useragentfile {otherargs}
+```
+
+Example Use (Traditional Proxy mode):
+```
+python3 credmaster.py --plugin {pluginname} --proxy socks5://127.0.0.1:1080 -u userfile -p passwordfile -a useragentfile {otherargs}
 ```
 
 or
@@ -80,7 +86,16 @@ or
 python3 credmaster.py --config config.json
 ```
 
-This tool requires AWS API access keys, a walkthrough on how to acquire these keys can be found here: https://bond-o.medium.com/aws-pass-through-proxy-84f1f7fa4b4b
+**Proxy Support**: CredMaster now supports traditional proxies without requiring AWS infrastructure. Use the `--proxy` argument with the following formats:
+- `socks4://host:port`
+- `socks4a://host:port` 
+- `socks5://host:port`
+- `http://host:port`
+- `http://user:pass@host:port` (with authentication)
+
+When using `--proxy`, AWS credentials are not required. The tool will route all requests through the specified proxy instead of creating AWS API gateways.
+
+This tool requires AWS API access keys for FireProx mode, a walkthrough on how to acquire these keys can be found here: https://bond-o.medium.com/aws-pass-through-proxy-84f1f7fa4b4b
 
 All other usage details can be found [on the wiki](https://github.com/knavesec/CredMaster/wiki/Usage)
 
