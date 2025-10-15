@@ -64,7 +64,7 @@ def owa_authenticate(url, username, password, useragent, pluginargs):
 
     except Exception as ex:
         data_response['error'] = True
-        data_response['output'] = ex
+        data_response['output'] = f"Connection error: {str(ex)}"
         pass
 
     return data_response

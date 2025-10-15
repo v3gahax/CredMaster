@@ -1,0 +1,19 @@
+[2025-10-15 15:20:44.395] Proxy configured: http://smartproxy.adversarygroup.com:8888
+[2025-10-15 15:20:44.396] Proxy mode enabled - skipping AWS FireProx credential check
+[2025-10-15 15:20:44.396] Execution started at: 2025-10-15 15:20:44.396641+00:00
+[2025-10-15 15:20:44.397] Proxy mode enabled - skipping AWS FireProx setup
+[2025-10-15 15:20:44.397] Testing proxy connection...
+[2025-10-15 15:20:45.456] Proxy connection test successful: Proxy connection successful. Response: {
+  "origin": "71.60.199.249"
+}
+
+[2025-10-15 15:20:45.965] Testconnect: Connection success, continuing
+[2025-10-15 15:20:45.965] Proxy Mode: http://smartproxy.adversarygroup.com:8888
+[2025-10-15 15:20:45.966] Total Threads: 1
+[2025-10-15 15:20:45.966] Starting Spray...
+[2025-10-15 15:20:45.966] Loading users and useragents
+[2025-10-15 15:20:52.453] proxy: [-] FAILURE: tester12345678@gmail.com Domain type COMMERCIAL not supported for user enum
+[2025-10-15 15:20:52.454] Completed userenum at 2025-10-15 15:20:52.454432+00:00
+[2025-10-15 15:20:52.454] End Time: 2025-10-15 15:20:52.454835+00:00
+[2025-10-15 15:20:52.454] Total Execution: 8.058194 seconds
+[2025-10-15 15:20:52.455] Valid credentials identified: 0

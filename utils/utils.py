@@ -121,6 +121,9 @@ def make_proxy_request(method, url, proxy_url=None, max_retries=3, **kwargs):
             # If we get 503/502, retry if we haven't exceeded max_retries
             if response.status_code in [502, 503] and retry_count < max_retries:
                 retry_count += 1
+                # Add a small delay between retries
+                import time
+                time.sleep(1)
                 continue
             else:
                 return response
@@ -128,6 +131,9 @@ def make_proxy_request(method, url, proxy_url=None, max_retries=3, **kwargs):
         except Exception as e:
             if retry_count < max_retries:
                 retry_count += 1
+                # Add a small delay between retries
+                import time
+                time.sleep(1)
                 continue
             else:
                 raise e

@@ -120,6 +120,11 @@ class ProxyManager:
             'http': proxy_url,
             'https': proxy_url
         }
+        
+        # Add proxy authentication headers if needed
+        if self.proxy_config['username'] and self.proxy_config['password']:
+            from requests.auth import HTTPProxyAuth
+            self.session.auth = HTTPProxyAuth(self.proxy_config['username'], self.proxy_config['password'])
     
     def get_session(self):
         """
@@ -158,6 +163,9 @@ class ProxyManager:
                     retry_count += 1
                     if retry_count <= max_retries:
                         last_error = f"Proxy returned {response.status_code}, retrying ({retry_count}/{max_retries})..."
+                        # Add a small delay between retries
+                        import time
+                        time.sleep(1)
                         continue
                     else:
                         return False, f"Proxy connection failed after {max_retries} retries. Last status: {response.status_code}"
@@ -168,11 +176,61 @@ class ProxyManager:
                 retry_count += 1
                 if retry_count <= max_retries:
                     last_error = f"Connection error, retrying ({retry_count}/{max_retries}): {str(e)}"
+                    # Add a small delay between retries
+                    import time
+                    time.sleep(1)
                     continue
                 else:
                     return False, f"Proxy connection failed after {max_retries} retries: {str(e)}"
         
         return False, f"Proxy connection failed: {last_error}"
+    
+    def cycle_ip(self, test_url="http://httpbin.org/ip", timeout=10):
+        """
+        Cycle to a new IP by making a request through the proxy
+        This is useful for rotating IP proxy services
+        
+        Args:
+            test_url (str): URL to test IP rotation against
+            timeout (int): Request timeout in seconds
+            
+        Returns:
+            tuple: (success: bool, new_ip: str, response: str)
+        """
+        if not self.session:
+            return False, None, "No proxy session configured"
+        
+        try:
+            response = self.session.get(test_url, timeout=timeout)
+            
+            if response.status_code == 200:
+                # Try to extract IP from response
+                try:
+                    import json
+                    ip_data = json.loads(response.text)
+                    new_ip = ip_data.get('origin', 'Unknown')
+                except:
+                    new_ip = 'Unknown'
+                
+                return True, new_ip, f"IP cycled successfully. New IP: {new_ip}"
+            else:
+                return False, None, f"IP cycle failed with status code: {response.status_code}"
+                
+        except Exception as e:
+            return False, None, f"IP cycle failed: {str(e)}"
+    
+    def get_current_ip(self, test_url="http://httpbin.org/ip", timeout=10):
+        """
+        Get the current IP being used by the proxy
+        
+        Args:
+            test_url (str): URL to check IP against
+            timeout (int): Request timeout in seconds
+            
+        Returns:
+            tuple: (success: bool, ip: str, response: str)
+        """
+        return self.cycle_ip(test_url, timeout)
     
     def cleanup(self):
         """

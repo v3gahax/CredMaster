@@ -133,6 +133,8 @@ class CredMaster(object):
 		# Proxy configuration
 		self.proxy_url = args.proxy or config_dict.get("proxy")
 		self.proxy_retries = args.proxy_retries or config_dict.get("proxy_retries", 3)
+		self.proxy_cycle = args.proxy_cycle or config_dict.get("proxy_cycle")
+		self.proxy_check_ip = args.proxy_check_ip or config_dict.get("proxy_check_ip", False)
 
 
 	def do_input_error_handling(self):
@@ -191,6 +193,8 @@ class CredMaster(object):
 			if self.access_key is None and self.secret_access_key is None and self.session_token is None and self.profile_name is None:
 				self.log_entry("No FireProx access arguments settings configured, add access keys/session token or fill out config file")
 				sys.exit()
+		else:
+			self.log_entry(f"Proxy mode enabled - skipping AWS FireProx credential check")
 
 		# Region handling
 		if self.region is not None and self.region not in self.regions:
@@ -301,12 +305,26 @@ class CredMaster(object):
 				self.log_entry("Proxy mode enabled - skipping AWS FireProx setup")
 				
 				# Test proxy connection
+				self.log_entry("Testing proxy connection...")
 				success, message = proxy_manager.test_proxy_connection(max_retries=self.proxy_retries)
 				if not success:
 					self.log_entry(f"Proxy connection test failed: {message}")
+					self.log_entry("This could be due to:")
+					self.log_entry("  - Proxy server is down or unreachable")
+					self.log_entry("  - Proxy authentication is required but not provided")
+					self.log_entry("  - Proxy doesn't allow connections to the test URL")
+					self.log_entry("  - Network connectivity issues")
 					sys.exit()
 				else:
 					self.log_entry(f"Proxy connection test successful: {message}")
+				
+				# Check current IP if requested
+				if self.proxy_check_ip:
+					ip_success, current_ip, ip_message = proxy_manager.get_current_ip()
+					if ip_success:
+						self.log_entry(f"Current proxy IP: {current_ip}")
+					else:
+						self.log_entry(f"Could not determine proxy IP: {ip_message}")
 				
 				# Create mock API structure for compatibility
 				self.apis = [{"proxy_url": url, "region": "proxy", "api_gateway_id": "proxy"}]
@@ -567,6 +585,7 @@ class CredMaster(object):
 			sys.exit()
 
 		count = 0
+		request_count = 0  # Track requests for IP cycling
 
 		while not self.q_spray.empty() and not self.cancelled:
 
@@ -796,6 +815,8 @@ if __name__ == '__main__':
 	adv_args.add_argument('--trim', '--remove', action="store_true", help="Remove users with found credentials from future sprays")
 	adv_args.add_argument('--proxy', default=None, required=False, help='Proxy URL (socks4://host:port, socks4a://host:port, socks5://host:port, http://host:port). Supports authentication: protocol://user:pass@host:port')
 	adv_args.add_argument('--proxy-retries', type=int, default=3, required=False, help='Number of retries for proxy 503/502 errors (default: 3)')
+	adv_args.add_argument('--proxy-cycle', type=int, default=None, required=False, help='Cycle proxy IP every N requests (useful for rotating IP proxies)')
+	adv_args.add_argument('--proxy-check-ip', default=False, action="store_true", required=False, help='Check and display current proxy IP before starting spray')
 
 	notify_args = parser.add_argument_group(title='Notification Inputs')
 	notify_args.add_argument('--slack_webhook', type=str, default=None, help='Webhook link for Slack notifications')
